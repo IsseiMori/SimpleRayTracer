@@ -154,7 +154,46 @@ public:
  
     Vec3f center; 
     float radius, radius2; 
-}; 
+};
+
+class Triangle : public Object{
+public:
+    Triangle(const Vec3f &_v0, const Vec3f &_v1, const Vec3f &_v2) : v0(_v0), v1(_v1), v2(_v2) {}
+    bool intersect(const Vec3f &orig, const Vec3f &dir, float &tnear, uint32_t &index, Vec2f &uv) const
+    {
+        Vec3f edge1 = v1 - v0;
+        Vec3f edge2 = v2 - v0;
+        Vec3f pvec = crossProduct(dir, edge2);
+        float det = dotProduct(edge1, pvec);
+        if (det == 0 || det < 0) return false;
+
+        Vec3f tvec = orig - v0;
+        uv.x = dotProduct(tvec, pvec);
+        if (uv.x < 0 || uv.x > det) return false;
+
+        Vec3f qvec = crossProduct(tvec, edge1);
+        uv.y = dotProduct(dir, qvec);
+        if (uv.x < 0 || uv.x + uv.y > det) return false;
+
+        float invDet = 1 / det;
+
+        tnear = dotProduct(edge2, qvec) * invDet;
+        uv.x *= invDet;
+        uv.y *= invDet;
+
+        return true;   
+    }
+
+    void getSurfaceProperties(const Vec3f &P, const Vec3f &I, const uint32_t &index, const Vec2f &uv, Vec3f &N, Vec2f &st) const
+    {
+        Vec3f edge1 = normalize(v1 - v0); 
+        Vec3f edge2 = normalize(v2 - v1); 
+        N = normalize(crossProduct(edge1, edge2)); 
+        // add st if you want the tile texture
+    }
+
+    Vec3f v0, v1, v2;
+};
  
 bool rayTriangleIntersect( 
     const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, 
