@@ -20,7 +20,9 @@ public:
     Vec3f operator - (const Vec3f &v) const { return Vec3f(x - v.x, y - v.y, z - v.z); } 
     Vec3f operator + (const Vec3f &v) const { return Vec3f(x + v.x, y + v.y, z + v.z); } 
     Vec3f operator - () const { return Vec3f(-x, -y, -z); } 
-    Vec3f& operator += (const Vec3f &v) { x += v.x, y += v.y, z += v.z; return *this; } 
+    Vec3f& operator += (const Vec3f &v) { x += v.x, y += v.y, z += v.z; return *this; }
+    bool operator==(const Vec3f &v) const { return v.x == x && v.y == y && v.z == z; }
+    bool operator!=(const Vec3f &v) const { return v.x != x || v.y != y || v.z != z; }
     friend Vec3f operator * (const float &r, const Vec3f &v) 
     { return Vec3f(v.x * r, v.y * r, v.z * r); } 
     friend std::ostream & operator << (std::ostream &os, const Vec3f &v) 
@@ -74,6 +76,36 @@ float deg2rad(const float &deg)
 inline 
 Vec3f mix(const Vec3f &a, const Vec3f& b, const float &mixValue) 
 { return a * (1 - mixValue) + b * mixValue; } 
+
+class Bounds3f{
+public:
+    Bounds3f() {
+        float minNum = std::numeric_limits<float>::lowest();
+        float maxNum = std::numeric_limits<float>::max();
+        pMin = Vec3f(maxNum, maxNum, maxNum);
+        pMax = Vec3f(minNum, minNum, minNum);
+    }
+    explicit Bounds3f(const Vec3f &p) : pMin(p), pMax(p) {}
+    Bounds3f(const Vec3f &p1, const Vec3f &p2) 
+        : pMin(std::min(p1.x, p2.x), std::min(p1.y,p2.y),
+               std::min(p1.z, p2.z)),
+          pMax(std::max(p1.x, p2.x), std::max(p1.y,p2.y),
+               std::max(p1.z, p2.z)) {}
+    bool operator==(const Bounds3f &b) const {
+        return b.pMin == pMin && b.pMax == pMax;
+    }
+    bool operator!=(const Bounds3f &b) const {
+        return b.pMin != pMin || b.pMax != pMax;
+    }
+    // Probably need IntersectP
+
+    friend std::ostream &operator<<(std::ostream &os, const Bounds3f &b) {
+         os << "[ " << b.pMin << " - " << b.pMax << " ]";
+         return os;
+    }
+
+    Vec3f pMin, pMax;
+};
  
 struct Options 
 { 
