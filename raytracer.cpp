@@ -84,10 +84,11 @@ Returns true if the ray intersects an object, false otherwise.
 
 bool trace( 
     const Vec3f &orig, const Vec3f &dir, 
-    const std::vector<std::unique_ptr<Object>> &objects, 
+    const std::vector<std::shared_ptr<Object>> &objects, 
     float &tNear, uint32_t &index, Vec2f &uv, Object **hitObject) 
-{ 
-    *hitObject = nullptr; 
+{
+    *hitObject = nullptr;
+
     for (uint32_t k = 0; k < objects.size(); ++k) { 
         float tNearK = kInfinity; 
         uint32_t indexK; 
@@ -102,6 +103,22 @@ bool trace(
  
     return (*hitObject != nullptr); 
 } 
+
+bool traceBVH(
+    const BVHAccel &bvh,
+    const Vec3f &orig, const Vec3f &dir, 
+    const std::vector<std::shared_ptr<Object>> &objects, 
+    float &tNear, uint32_t &index, Vec2f &uv, Object **hitObject) 
+{
+    *hitObject = nullptr;
+
+    if (bvh.intersect(orig, dir, tNear, index, uv)) {
+        *hitObject = bvh.orderedObjects[index].get();
+    }
+
+ 
+    return (*hitObject != nullptr); 
+} 
  
 /*
 Implementation of the Whitted-syle light transport algorithm (E [S*] (D|G) L)
@@ -111,9 +128,10 @@ If the surface is duffuse/glossy we use the Phong illumation model to compute th
 */
 
 Vec3f castRay( 
-    const Vec3f &orig, const Vec3f &dir, 
-    const std::vector<std::unique_ptr<Object>> &objects, 
-    const std::vector<std::unique_ptr<Light>> &lights, 
+    const BVHAccel &bvh,
+    const Vec3f &orig, const Vec3f &dir,
+    const std::vector<std::shared_ptr<Object>> &objects,
+    const std::vector<std::unique_ptr<Light>> &lights,
     const Options &options, 
     uint32_t depth, 
     bool test = false) 
@@ -127,7 +145,7 @@ Vec3f castRay(
     Vec2f uv; 
     uint32_t index = 0; 
     Object *hitObject = nullptr; 
-    if (trace(orig, dir, objects, tnear, index, uv, &hitObject)) { 
+    if (traceBVH(bvh, orig, dir, objects, tnear, index, uv, &hitObject)) { 
         Vec3f hitPoint = orig + dir * tnear; 
         Vec3f N; // normal 
         Vec2f st; // st coordinates 
@@ -144,8 +162,8 @@ Vec3f castRay(
                 Vec3f refractionRayOrig = (dotProduct(refractionDirection, N) < 0) ? 
                     hitPoint - N * options.bias : 
                     hitPoint + N * options.bias; 
-                Vec3f reflectionColor = castRay(reflectionRayOrig, reflectionDirection, objects, lights, options, depth + 1, 1); 
-                Vec3f refractionColor = castRay(refractionRayOrig, refractionDirection, objects, lights, options, depth + 1, 1); 
+                Vec3f reflectionColor = castRay(bvh, reflectionRayOrig, reflectionDirection, objects, lights, options, depth + 1, 1); 
+                Vec3f refractionColor = castRay(bvh, refractionRayOrig, refractionDirection, objects, lights, options, depth + 1, 1); 
                 float kr; 
                 fresnel(dir, N, hitObject->ior, kr); 
                 hitColor = reflectionColor * kr + refractionColor * (1 - kr); 
@@ -159,7 +177,7 @@ Vec3f castRay(
                 Vec3f reflectionRayOrig = (dotProduct(reflectionDirection, N) < 0) ? 
                     hitPoint + N * options.bias : 
                     hitPoint - N * options.bias; 
-                hitColor = castRay(reflectionRayOrig, reflectionDirection, objects, lights, options, depth + 1) * kr; 
+                hitColor = castRay(bvh, reflectionRayOrig, reflectionDirection, objects, lights, options, depth + 1) * kr; 
                 break; 
             } 
             default: 
@@ -200,7 +218,7 @@ Vec3f castRay(
 
 void render( 
     const Options &options, 
-    const std::vector<std::unique_ptr<Object>> &objects, 
+    const std::vector<std::shared_ptr<Object>> &objects, 
     const std::vector<std::unique_ptr<Light>> &lights) 
 { 
     Vec3f *framebuffer = new Vec3f[options.width * options.height]; 
@@ -208,13 +226,17 @@ void render(
     float scale = tan(deg2rad(options.fov * 0.5)); 
     float imageAspectRatio = options.width / (float)options.height; 
     Vec3f orig(0); 
+
+    // BVH
+    BVHAccel bvh = BVHAccel(objects);
+
     for (uint32_t j = 0; j < options.height; ++j) { 
         for (uint32_t i = 0; i < options.width; ++i) { 
             // generate primary ray direction
             float x = (2 * (i + 0.5) / (float)options.width - 1) * imageAspectRatio * scale; 
             float y = (1 - 2 * (j + 0.5) / (float)options.height) * scale; 
             Vec3f dir = normalize(Vec3f(x, y, -1)); 
-            *(pix++) = castRay(orig, dir, objects, lights, options, 0); 
+            *(pix++) = castRay(bvh, orig, dir, objects, lights, options, 0); 
         } 
     } 
  
@@ -239,25 +261,39 @@ void render(
 int main(int argc, char **argv) 
 { 
     // creating the scene (adding objects and lights)
-    std::vector<std::unique_ptr<Object>> objects; 
+    std::vector<std::shared_ptr<Object>> objects; 
     std::vector<std::unique_ptr<Light>> lights; 
  
     Sphere *sph1 = new Sphere(Vec3f(-1, 0, -12), 2); 
     sph1->materialType = DIFFUSE_AND_GLOSSY; 
     sph1->diffuseColor = Vec3f(0.6, 0.7, 0.8); 
+
     Sphere *sph2 = new Sphere(Vec3f(0.5, -0.5, -8), 1.5); 
     sph2->ior = 1.5; 
     sph2->materialType = REFLECTION_AND_REFRACTION; 
-    Sphere *sph3 = new Sphere(Vec3f(-5, 5, -10), 1); 
+
+    Sphere *sph3 = new Sphere(Vec3f(6, 0, -12), 2); 
     sph3->materialType = DIFFUSE_AND_GLOSSY; 
-    sph3->diffuseColor = Vec3f(0.8, 0.2, 0.8); 
+    sph3->diffuseColor = Vec3f(0.6, 0.7, 0.8); 
  
     objects.push_back(std::unique_ptr<Sphere>(sph1)); 
     objects.push_back(std::unique_ptr<Sphere>(sph2)); 
-    objects.push_back(std::unique_ptr<Sphere>(sph3)); 
+    objects.push_back(std::unique_ptr<Sphere>(sph3));
+
+    Triangle *tri1 = new Triangle(Vec3f(-5,-3,6), Vec3f(5,-3,6), Vec3f(-5,-3,-16));
+    tri1->materialType = DIFFUSE_AND_GLOSSY;
+    tri1->diffuseColor = Vec3f(1.0, 0, 0);
+
+    Triangle *tri2 = new Triangle(Vec3f(5,-3,6), Vec3f(5,-3,-16), Vec3f(-5,-3,-16));
+    tri2->materialType = DIFFUSE_AND_GLOSSY;
+    tri2->diffuseColor = Vec3f(1.0, 0, 0);
+
+    objects.push_back(std::unique_ptr<Triangle>(tri1));
+    objects.push_back(std::unique_ptr<Triangle>(tri2));
  
-    /* 
-    Vec3f verts[4] = {{-5,-3,-6}, {5,-3,-6}, {5,-3,-16}, {-5,-3,-16}}; 
+ 
+    /*   
+    Vec3f verts[4] = {{-5,-3,6}, {5,-3,6}, {5,-3,-16}, {-5,-3,-16}}; 
     uint32_t vertIndex[6] = {0, 1, 3, 1, 2, 3}; 
     Vec2f st[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}}; 
     MeshTriangle *mesh = new MeshTriangle(verts, vertIndex, 2, st); 
@@ -273,9 +309,9 @@ int main(int argc, char **argv)
     Options options; 
     options.width = 640; 
     options.height = 480; 
-    options.fov = 90; 
+    options.fov = 54.43; 
     options.backgroundColor = Vec3f(0.235294, 0.67451, 0.843137); 
-    options.maxDepth = 5; 
+    options.maxDepth = 2; 
     options.bias = 0.00001; 
  
     // finally, render

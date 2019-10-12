@@ -33,9 +33,6 @@ struct BVHObjectInfo {
 };
 
 struct BVHBuildNode {
-    Bounds3f bounds;
-    BVHBuildNode *children[2];
-    int splitAxis, firstObjOffset, nObjects;
 
     void InitLeaf(int first, int n, const Bounds3f &b) {
         firstObjOffset = first;
@@ -53,17 +50,31 @@ struct BVHBuildNode {
         nObjects = 0;
     }
 
+    Bounds3f bounds;
+    BVHBuildNode *children[2];
+    int splitAxis;
+    int nObjects;
+    int firstObjOffset;
+
 };
 
 class BVHAccel {
 public:
-    BVHAccel(std::vector<Object> &o) {}
+    BVHAccel(const std::vector<std::shared_ptr<Object>> &o) : objects(o) {
+        std::vector<BVHObjectInfo> objectInfo;
+        int totalNodes = 0;
+        for (int i = 0; i < objects.size(); ++i) {
+            objectInfo.push_back(BVHObjectInfo(i, objects[i]->objectBounds()));
+        }
+
+        nodeHead = recursiveBuild(objectInfo, 0, objects.size(), &totalNodes);
+    }
 
     // Build a BVH binary tree
     BVHBuildNode *recursiveBuild(std::vector<BVHObjectInfo> &objectInfo, int start,
-                                 int end, int *totalNodes, 
-                                 std::vector<std::shared_ptr<Object>> &orderedObjects) {
+                                 int end, int *totalNodes) {
         BVHBuildNode *node;
+        node = new BVHBuildNode;
         (*totalNodes)++;
 
         // Compute bounds for all objects in BVH node
@@ -73,15 +84,17 @@ public:
 
         int nObjects = end - start;
 
-        // 
+        // Create leaf node
         if (nObjects == 1) {
             int firstObjOffset = orderedObjects.size();
             for (int i = start; i < end; ++i) {
                 int objNum = objectInfo[i].objectNumber;
                 orderedObjects.push_back(objects[objNum]);
             }
+
             node->InitLeaf(firstObjOffset, nObjects, bounds);
             return node;
+        // Create interior node
         } else {
 
             // Find the axis with the most extent between centroids
@@ -91,7 +104,8 @@ public:
             }
             int dim = centroidBounds.MaximumExtent();
 
-            int mid = (start - end) / 2;
+            int mid = (start + end) / 2;
+
 
             // if all objects are at one point, push all to the array
             if (centroidBounds.pMax[dim] == centroidBounds.pMin[dim]) {
@@ -116,7 +130,7 @@ public:
                     break;
                 */
                 // THIS IS EQUAL
-                mid = (start - end) / 2;
+                mid = (start + end) / 2;
                 // order objectInfo so that mid is the middle element if fully sorted,
                 // everything before mid is less than mid, after mid is more than mid
                 std::nth_element(&objectInfo[start], &objectInfo[mid], 
@@ -124,24 +138,74 @@ public:
                                  [dim](const BVHObjectInfo &a, const BVHObjectInfo &b) {
                                     return a.centroid[dim] < b.centroid[dim];
                                  });
+
+                // recursiveBuild(objectInfo, start, mid, totalNodes);
+                // recursiveBuild(objectInfo, mid, end, totalNodes);
                 node->InitInterior(dim, 
                                    recursiveBuild(objectInfo, start, mid,
-                                                  totalNodes, orderedObjects),
+                                                  totalNodes),
                                    recursiveBuild(objectInfo, mid, end,
-                                                  totalNodes, orderedObjects));
-
+                                                  totalNodes));
             }
         }
 
         return node;
     }
 
-    bool intersect(const Vec3f &orig, const Vec3f &dir, float &tnear, uint32_t &index, Vec2f &uv) {
+    bool intersectHelper(BVHBuildNode *node, bool &hit, int dirIsNeg[3],
+                         const Vec3f &orig, const Vec3f &dir, 
+                         float &tnear, uint32_t &index, Vec2f &uv) const {
+        // std::cout << "intersectHelper()" << std::endl;
+
+        if (node->bounds.intersect(orig, dir)) {
+            // std::cout << "intersectHelper intersect" << std::endl;
+            // Leaf node
+            if (node->nObjects > 0) {
+                // std::cout << "Leaf node" << std::endl;
+                // Check intersect for each object (there is one object except for meshes)
+                for (int i = 0; i < node->nObjects; ++i) { 
+                    float tnearTmp;
+                    if (orderedObjects[node->firstObjOffset + i]->intersect(orig, dir, tnearTmp, index, uv)) {
+                        hit = true;
+                        if (tnearTmp < tnear) {
+                            tnear = tnearTmp;
+                            index = node->firstObjOffset + i;
+                            return true;
+                        }
+                    }
+                }
+            // Non-leaf node
+            }else {
+                // std::cout << "Non-leaf node" << std::endl;
+                bool hit0, hit1;
+                if (dirIsNeg[node->splitAxis]) {
+                    hit0 = intersectHelper(node->children[1], hit, dirIsNeg, orig, dir, tnear, index, uv);
+                    hit1 = intersectHelper(node->children[0], hit, dirIsNeg, orig, dir, tnear, index, uv);
+                } else {
+                    hit0 = intersectHelper(node->children[0], hit, dirIsNeg, orig, dir, tnear, index, uv);
+                    hit1 = intersectHelper(node->children[1], hit, dirIsNeg, orig, dir, tnear, index, uv);
+                }
+                return (hit0 || hit1);
+            }
+        }
+
+        return false;
+    }
+
+    bool intersect(const Vec3f &orig, const Vec3f &dir, float &tnear, uint32_t &index, Vec2f &uv) const {
         bool hit = false;
         int dirIsNeg[] = {dir.x < 0, dir.y < 0, dir.z < 0};
+
+        BVHBuildNode *node = nodeHead;
+        
+        // std::cout << "intersect()" << std::endl;
+        bool ret = intersectHelper(node, hit, dirIsNeg, orig, dir, tnear, index, uv);
+        return ret;
     }
 
     std::vector<std::shared_ptr<Object>> objects;
+    std::vector<std::shared_ptr<Object>> orderedObjects;
+    BVHBuildNode *nodeHead = nullptr;
 };
 
 #endif

@@ -172,6 +172,10 @@ Bounds3f Union(const Bounds3f &b1, const Bounds3f &b2) {
     Bounds3f ret;
     ret.pMin = Min(b1.pMin, b2.pMin);
     ret.pMax = Max(b1.pMax, b2.pMax);
+    /*std::cout << "Union()" << std::endl;
+    std::cout << b1 << std::endl;
+    std::cout << b2 << std::endl;
+    std::cout << ret << std::endl;*/
     return ret;
 }
 
@@ -208,17 +212,19 @@ class Object
  public: 
     Object() : 
         materialType(DIFFUSE_AND_GLOSSY), 
-        ior(1.3), Kd(0.8), Ks(0.2), diffuseColor(0.2), specularExponent(25) {} 
+        ior(1.3), Kd(0.8), Ks(0.2), diffuseColor(0.2), specularExponent(25), isMesh(false) {} 
     virtual ~Object() {} 
     virtual bool intersect(const Vec3f &, const Vec3f &, float &, uint32_t &, Vec2f &) const = 0; 
     virtual void getSurfaceProperties(const Vec3f &, const Vec3f &, const uint32_t &, const Vec2f &, Vec3f &, Vec2f &) const = 0; 
     virtual Vec3f evalDiffuseColor(const Vec2f &) const { return diffuseColor; } 
+    virtual Bounds3f objectBounds() const = 0;
     // material properties
     MaterialType materialType; 
     float ior; 
     float Kd, Ks; 
     Vec3f diffuseColor; 
-    float specularExponent; 
+    float specularExponent;
+    bool isMesh;
 }; 
  
 bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) 
@@ -258,6 +264,18 @@ public:
  
     void getSurfaceProperties(const Vec3f &P, const Vec3f &I, const uint32_t &index, const Vec2f &uv, Vec3f &N, Vec2f &st) const 
     { N = normalize(P - center); } 
+
+    Bounds3f objectBounds() const {
+        /*
+        std::cout << "objectBounds()" << std::endl;
+        std::cout << center << std::endl;
+        std::cout << radius << std::endl;
+        std::cout << Vec3f(center.x - radius, center.y - radius, center.z - radius) << std::endl;
+        std::cout << Vec3f(center.x + radius, center.y + radius, center.z + radius) << std::endl;
+        */
+        return Bounds3f(Vec3f(center.x - radius, center.y - radius, center.z - radius), 
+                        Vec3f(center.x + radius, center.y + radius, center.z + radius));
+    }
  
     Vec3f center; 
     float radius, radius2; 
@@ -297,6 +315,15 @@ public:
         Vec3f edge2 = normalize(v2 - v1); 
         N = normalize(crossProduct(edge1, edge2)); 
         // add st if you want the tile texture
+    }
+
+    Bounds3f objectBounds() const {
+        return Bounds3f(Vec3f(std::min(std::min(v0.x, v1.x), v2.x),
+                              std::min(std::min(v0.y, v1.y), v2.y),
+                              std::min(std::min(v0.z, v1.z), v2.z)),
+                        Vec3f(std::max(std::max(v0.x, v1.x), v2.x),
+                              std::max(std::max(v0.y, v1.y), v2.y),
+                              std::max(std::max(v0.z, v1.z), v2.z)));
     }
 
     Vec3f v0, v1, v2;
@@ -350,6 +377,7 @@ public:
         numTriangles = numTris; 
         stCoordinates = std::unique_ptr<Vec2f[]>(new Vec2f[maxIndex]); 
         memcpy(stCoordinates.get(), st, sizeof(Vec2f) * maxIndex); 
+        isMesh = true;
     } 
  
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &tnear, uint32_t &index, Vec2f &uv) const 
@@ -392,6 +420,10 @@ public:
         float pattern = (fmodf(st.x * scale, 1) > 0.5) ^ (fmodf(st.y * scale, 1) > 0.5); 
         return mix(Vec3f(0.815, 0.235, 0.031), Vec3f(0.937, 0.937, 0.231), pattern); 
     } 
+
+    Bounds3f objectBounds() const {
+        return Bounds3f();
+    }
  
     std::unique_ptr<Vec3f[]> vertices; 
     uint32_t numTriangles; 
