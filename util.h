@@ -281,11 +281,41 @@ public:
     float radius, radius2; 
 };
 
+ 
+bool rayTriangleIntersect( 
+    const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, 
+    const Vec3f &orig, const Vec3f &dir, 
+    float &tnear, float &u, float &v) 
+{ 
+    Vec3f edge1 = v1 - v0; 
+    Vec3f edge2 = v2 - v0; 
+    Vec3f pvec = crossProduct(dir, edge2); 
+    float det = dotProduct(edge1, pvec); 
+    if (det == 0 || det < 0) return false; 
+ 
+    Vec3f tvec = orig - v0; 
+    u = dotProduct(tvec, pvec); 
+    if (u < 0 || u > det) return false; 
+ 
+    Vec3f qvec = crossProduct(tvec, edge1); 
+    v = dotProduct(dir, qvec); 
+    if (v < 0 || u + v > det) return false; 
+ 
+    float invDet = 1 / det; 
+ 
+    tnear = dotProduct(edge2, qvec) * invDet; 
+    u *= invDet; 
+    v *= invDet; 
+ 
+    return true; 
+} 
+
 class Triangle : public Object{
 public:
     Triangle(const Vec3f &_v0, const Vec3f &_v1, const Vec3f &_v2) : v0(_v0), v1(_v1), v2(_v2) {}
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &tnear, uint32_t &index, Vec2f &uv) const
     {
+
         Vec3f edge1 = v1 - v0;
         Vec3f edge2 = v2 - v0;
         Vec3f pvec = crossProduct(dir, edge2);
@@ -298,7 +328,7 @@ public:
 
         Vec3f qvec = crossProduct(tvec, edge1);
         uv.y = dotProduct(dir, qvec);
-        if (uv.x < 0 || uv.x + uv.y > det) return false;
+        if (uv.y < 0 || uv.x + uv.y > det) return false;
 
         float invDet = 1 / det;
 
@@ -328,34 +358,7 @@ public:
 
     Vec3f v0, v1, v2;
 };
- 
-bool rayTriangleIntersect( 
-    const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, 
-    const Vec3f &orig, const Vec3f &dir, 
-    float &tnear, float &u, float &v) 
-{ 
-    Vec3f edge1 = v1 - v0; 
-    Vec3f edge2 = v2 - v0; 
-    Vec3f pvec = crossProduct(dir, edge2); 
-    float det = dotProduct(edge1, pvec); 
-    if (det == 0 || det < 0) return false; 
- 
-    Vec3f tvec = orig - v0; 
-    u = dotProduct(tvec, pvec); 
-    if (u < 0 || u > det) return false; 
- 
-    Vec3f qvec = crossProduct(tvec, edge1); 
-    v = dotProduct(dir, qvec); 
-    if (v < 0 || u + v > det) return false; 
- 
-    float invDet = 1 / det; 
- 
-    tnear = dotProduct(edge2, qvec) * invDet; 
-    u *= invDet; 
-    v *= invDet; 
- 
-    return true; 
-} 
+
  
 class MeshTriangle : public Object 
 { 
@@ -387,6 +390,7 @@ public:
             const Vec3f & v0 = vertices[vertexIndex[k * 3]]; 
             const Vec3f & v1 = vertices[vertexIndex[k * 3 + 1]]; 
             const Vec3f & v2 = vertices[vertexIndex[k * 3 + 2]]; 
+            // std::cout << v0 << " +  " << v1 << ", + " << v2 << std::endl;
             float t, u, v; 
             if (rayTriangleIntersect(v0, v1, v2, orig, dir, t, u, v) && t < tnear) { 
                 tnear = t; 
