@@ -179,7 +179,7 @@ Vec3f castRay(
             case REFLECTION: 
             { 
                 float kr; 
-                fresnel(dir, N, hitObject->ior, kr); 
+                fresnel(dir, N, hitObject->ior, kr);
                 Vec3f reflectionDirection = reflect(dir, N); 
                 Vec3f reflectionRayOrig = (dotProduct(reflectionDirection, N) < 0) ? 
                     hitPoint + N * options.bias : 
@@ -302,7 +302,7 @@ bool importMesh(std::string fileName, std::vector<Vec3f> &vertices,
 
     while (getline(ply, str)) {
         auto words = split(str, " ");
-        if (words.size() == 5) {
+        if (words.size() == 3) {
             vertices.push_back(Vec3f(std::stof(words[0]), 
                                      std::stof(words[1]),
                                      std::stof(words[2])));
@@ -338,7 +338,7 @@ bool importMeshAsBox(std::string fileName, std::vector<Vec3f> &vertices,
 
     while (getline(ply, str)) {
         auto words = split(str, " ");
-        if (words.size() == 5) {
+        if (words.size() == 3) {
             bounds = Union(bounds, Vec3f(std::stof(words[0]), 
                                          std::stof(words[1]),
                                          std::stof(words[2])));
@@ -384,18 +384,92 @@ bool addMesh(std::vector<std::shared_ptr<Object>> &objects,
              std::vector<Vec3f> &vertices, 
              std::vector<int> &vertexIndex,
              float scale = 1,
-             Vec3f t = Vec3f(0,0,0)) {
+             Vec3f t = Vec3f(0,0,0),
+             MaterialType materialType = DIFFUSE_AND_GLOSSY,
+             Vec3f diffuseColor = Vec3f(0, 0, 1.0),
+             float ior = 1.5
+             ) {
     auto itor = vertexIndex.begin();
     while (itor != vertexIndex.end()) {
 
         Triangle *tri = new Triangle(vertices[*itor++] * scale + t, 
                                      vertices[*itor++] * scale + t,
                                      vertices[*itor++] * scale + t);
-        tri->materialType = DIFFUSE_AND_GLOSSY;
-        tri->diffuseColor = Vec3f(0, 0, 1.0);
+        tri->materialType = materialType;
+        tri->diffuseColor = diffuseColor;
+        tri->ior = ior;
 
         objects.push_back(std::unique_ptr<Triangle>(tri));
     }
+}
+
+bool addLightRoom(std::vector<std::shared_ptr<Object>> &objects) {
+    Bounds3f room = Bounds3f(Vec3f(-7, -5, -15), Vec3f(7, 5, -5));
+
+    Triangle *left1 = new Triangle(Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
+                                   Vec3f(room.pMin.x, room.pMax.y, room.pMax.z),
+                                   Vec3f(room.pMin.x, room.pMin.y, room.pMax.z));
+    Triangle *left2 = new Triangle(Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
+                                   Vec3f(room.pMin.x, room.pMax.y, room.pMin.z),
+                                   Vec3f(room.pMin.x, room.pMax.y, room.pMax.z));
+    left1->materialType = DIFFUSE_AND_GLOSSY;
+    left2->materialType = DIFFUSE_AND_GLOSSY;
+    left1->diffuseColor = Vec3f(1.0, 0, 0);
+    left2->diffuseColor = Vec3f(1.0, 0, 0);
+    objects.push_back(std::unique_ptr<Triangle>(left1));
+    objects.push_back(std::unique_ptr<Triangle>(left2));
+
+    Triangle *right1 = new Triangle(Vec3f(room.pMax.x, room.pMin.y, room.pMin.z),
+                                   Vec3f(room.pMax.x, room.pMin.y, room.pMax.z),
+                                   Vec3f(room.pMax.x, room.pMax.y, room.pMax.z));
+    Triangle *right2 = new Triangle(Vec3f(room.pMax.x, room.pMin.y, room.pMin.z),
+                                   Vec3f(room.pMax.x, room.pMax.y, room.pMax.z),
+                                   Vec3f(room.pMax.x, room.pMax.y, room.pMin.z));
+    right1->materialType = DIFFUSE_AND_GLOSSY;
+    right2->materialType = DIFFUSE_AND_GLOSSY;
+    right1->diffuseColor = Vec3f(0, 1.0, 0);
+    right2->diffuseColor = Vec3f(0, 1.0, 0);
+    objects.push_back(std::unique_ptr<Triangle>(right1));
+    objects.push_back(std::unique_ptr<Triangle>(right2));
+
+    Triangle *floor1 = new Triangle(Vec3f(room.pMax.x, room.pMin.y, room.pMax.z),
+                                   Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
+                                   Vec3f(room.pMin.x, room.pMin.y, room.pMax.z));
+    Triangle *floor2 = new Triangle(Vec3f(room.pMax.x, room.pMin.y, room.pMax.z),
+                                   Vec3f(room.pMax.x, room.pMin.y, room.pMin.z),
+                                   Vec3f(room.pMin.x, room.pMin.y, room.pMin.z));
+    floor1->materialType = DIFFUSE_AND_GLOSSY;
+    floor2->materialType = DIFFUSE_AND_GLOSSY;
+    floor1->diffuseColor = Vec3f(0.5, 0.5, 0.5);
+    floor2->diffuseColor = Vec3f(0.5, 0.5, 0.5);
+    objects.push_back(std::unique_ptr<Triangle>(floor1));
+    objects.push_back(std::unique_ptr<Triangle>(floor2));
+
+    Triangle *ceiling1 = new Triangle(Vec3f(room.pMax.x, room.pMax.y, room.pMin.z),
+                                      Vec3f(room.pMin.x, room.pMax.y, room.pMax.z),
+                                      Vec3f(room.pMin.x, room.pMax.y, room.pMin.z));
+    Triangle *ceiling2 = new Triangle(Vec3f(room.pMax.x, room.pMax.y, room.pMin.z),
+                                      Vec3f(room.pMax.x, room.pMax.y, room.pMax.z),
+                                      Vec3f(room.pMin.x, room.pMax.y, room.pMax.z));
+    ceiling1->materialType = DIFFUSE_AND_GLOSSY;
+    ceiling2->materialType = DIFFUSE_AND_GLOSSY;
+    ceiling1->diffuseColor = Vec3f(0.5, 0.5, 0.5);
+    ceiling2->diffuseColor = Vec3f(0.5, 0.5, 0.5);
+    objects.push_back(std::unique_ptr<Triangle>(ceiling1));
+    objects.push_back(std::unique_ptr<Triangle>(ceiling2));
+
+    Triangle *back1 = new Triangle(Vec3f(room.pMax.x, room.pMin.y, room.pMin.z),
+                                   Vec3f(room.pMin.x, room.pMax.y, room.pMin.z),
+                                   Vec3f(room.pMin.x, room.pMin.y, room.pMin.z));
+    Triangle *back2 = new Triangle(Vec3f(room.pMax.x, room.pMin.y, room.pMin.z),
+                                   Vec3f(room.pMax.x, room.pMax.y, room.pMin.z),
+                                   Vec3f(room.pMin.x, room.pMax.y, room.pMin.z));
+    back1->materialType = DIFFUSE_AND_GLOSSY;
+    back2->materialType = DIFFUSE_AND_GLOSSY;
+    back1->diffuseColor = Vec3f(0.5, 0.5, 0.5);
+    back2->diffuseColor = Vec3f(0.5, 0.5, 0.5);
+    objects.push_back(std::unique_ptr<Triangle>(back1));
+    objects.push_back(std::unique_ptr<Triangle>(back2));
 }
  
 // In the main function of the program, we create the scene (create objects and lights) as well as set the options for the render (image widht and height, maximum recursion depth, field-of-view, etc.). We then call the render function(). 
@@ -408,47 +482,22 @@ int main(int argc, char **argv)
     std::vector<std::shared_ptr<Object>> objects; 
     std::vector<std::unique_ptr<Light>> lights; 
  
-    Sphere *sph1 = new Sphere(Vec3f(-1, 0, -12), 2); 
-    sph1->materialType = DIFFUSE_AND_GLOSSY; 
+    Sphere *sph1 = new Sphere(Vec3f(-4, -3, -6), 1.5); 
+    sph1->materialType = DIFFUSE_AND_GLOSSY;
     sph1->diffuseColor = Vec3f(0.6, 0.7, 0.8); 
 
-    Sphere *sph2 = new Sphere(Vec3f(0.5, -0.5, -8), 1.5); 
+    Sphere *sph2 = new Sphere(Vec3f(3, 1, -4), 1.5); 
     sph2->ior = 1.5; 
-    sph2->materialType = REFLECTION_AND_REFRACTION; 
-
-    Sphere *sph3 = new Sphere(Vec3f(6, 0, -12), 2); 
-    sph3->materialType = DIFFUSE_AND_GLOSSY; 
-    sph3->diffuseColor = Vec3f(0.6, 0.7, 0.8); 
+    sph2->diffuseColor = Vec3f(0, 0, 0); 
+    sph2->materialType = REFLECTION; 
  
-    // objects.push_back(std::unique_ptr<Sphere>(sph1)); 
-    // objects.push_back(std::unique_ptr<Sphere>(sph2)); 
-    // objects.push_back(std::unique_ptr<Sphere>(sph3));
+    objects.push_back(std::unique_ptr<Sphere>(sph1)); 
+    objects.push_back(std::unique_ptr<Sphere>(sph2)); 
 
     // Triangle Mesh Counte Clock wise
 
     // Floor
-    Triangle *tri1 = new Triangle(Vec3f(-5,-5,-5), Vec3f(5,-5,-15), Vec3f(-5,-5,-15));
-    tri1->materialType = DIFFUSE_AND_GLOSSY;
-    tri1->diffuseColor = Vec3f(1.0, 0, 0);
-
-    Triangle *tri2 = new Triangle(Vec3f(-5,-5,-5), Vec3f(5,-5,-5), Vec3f(5,-5,-15));
-    tri2->materialType = DIFFUSE_AND_GLOSSY;
-    tri2->diffuseColor = Vec3f(1.0, 0, 0);
-
-    objects.push_back(std::unique_ptr<Triangle>(tri1));
-    objects.push_back(std::unique_ptr<Triangle>(tri2));
-
-    // Wall
-    Triangle *tri3 = new Triangle(Vec3f(-5,-5,-5), Vec3f(-5,-5,-15), Vec3f(-5,10,-15));
-    tri3->materialType = DIFFUSE_AND_GLOSSY;
-    tri3->diffuseColor = Vec3f(0, 1.0, 0);
-
-    Triangle *tri4 = new Triangle(Vec3f(-5,-5,-5), Vec3f(-5,10,-15), Vec3f(-5,10,-5));
-    tri4->materialType = DIFFUSE_AND_GLOSSY;
-    tri4->diffuseColor = Vec3f(0, 1.0, 0);
-
-    objects.push_back(std::unique_ptr<Triangle>(tri3));
-    objects.push_back(std::unique_ptr<Triangle>(tri4));
+    addLightRoom(objects);
 
     /*Triangle *tri = new Triangle(Vec3f({2,-3,-10}), Vec3f(2,-3,-16), Vec3f(-2,-3,-16));
     tri->materialType = DIFFUSE_AND_GLOSSY;
@@ -467,16 +516,17 @@ int main(int argc, char **argv)
     */
     
  
-    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(-20, 70, 20), 0.5))); 
-    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(30, 50, -12), 1))); 
-    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 15, 10), 0.5))); 
+    //lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(-20, 70, 20), 0.5))); 
+    //lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(30, 50, -12), 1))); 
+    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 2, 10), 1.0))); 
+    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 4.5, -10), 1.0))); 
 
 
     std::vector<Vec3f> vertices; 
     std::vector<int> vertexIndex; 
-    importMesh("../model/bun_zipper_res4.ply", vertices, vertexIndex);
+    importMesh("../model/dragon_vrip_res3.ply", vertices, vertexIndex);
 
-    addMesh(objects, vertices, vertexIndex, 40, Vec3f(0, -6.3, -12));
+    // addMesh(objects, vertices, vertexIndex, 50, Vec3f(0, -8, -9));
 
  
     // setting up options
@@ -485,7 +535,7 @@ int main(int argc, char **argv)
     options.height = 480; 
     options.fov = 90; 
     options.backgroundColor = Vec3f(0.235294, 0.67451, 0.843137); 
-    options.maxDepth = 2; 
+    options.maxDepth = 5; 
     options.bias = 0.00001; 
  
     // finally, render
