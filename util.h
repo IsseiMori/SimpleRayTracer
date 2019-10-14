@@ -11,7 +11,7 @@
 #ifndef UTILH_INCLUDE
 #define UTILH_INCLUDE
 
-const float kInfinity = std::numeric_limits<float>::max(); 
+const float kInfinity = std::numeric_limits<float>::max();
  
 class Vec3f { 
 public: 
@@ -22,6 +22,7 @@ public:
     Vec3f operator * (const Vec3f &v) const { return Vec3f(x * v.x, y * v.y, z * v.z); } 
     Vec3f operator - (const Vec3f &v) const { return Vec3f(x - v.x, y - v.y, z - v.z); } 
     Vec3f operator + (const Vec3f &v) const { return Vec3f(x + v.x, y + v.y, z + v.z); } 
+    Vec3f operator + (const float &r) const { return Vec3f(x + r, y + r, z + r); } 
     Vec3f operator - () const { return Vec3f(-x, -y, -z); } 
     Vec3f& operator += (const Vec3f &v) { x += v.x, y += v.y, z += v.z; return *this; }
     bool operator==(const Vec3f &v) const { return v.x == x && v.y == y && v.z == z; }
@@ -313,11 +314,18 @@ bool rayTriangleIntersect(
 class Triangle : public Object{
 public:
     Triangle(const Vec3f &_v0, const Vec3f &_v1, const Vec3f &_v2) : v0(_v0), v1(_v1), v2(_v2) {}
+
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &tnear, uint32_t &index, Vec2f &uv) const
     {
-
         Vec3f edge1 = v1 - v0;
         Vec3f edge2 = v2 - v0;
+
+        /*Vec3f n = crossProduct(edge1, edge2);
+        float NdotRayDirection = dotProduct(n, dir);
+        float d = dotProduct(n, v0); 
+        float t = (dotProduct(n, orig) + d) / NdotRayDirection; 
+        if (t < 0) return false;*/
+
         Vec3f pvec = crossProduct(dir, edge2);
         float det = dotProduct(edge1, pvec);
         if (det == 0 || det < 0) return false;
@@ -335,6 +343,14 @@ public:
         tnear = dotProduct(edge2, qvec) * invDet;
         uv.x *= invDet;
         uv.y *= invDet;
+
+
+        /*std::cout << orig << std::endl;
+        std::cout << dir << std::endl;
+        std::cout << v0 << std::endl;
+        std::cout << v1 << std::endl;
+        std::cout << v2 << std::endl;
+        std::cout << det << std::endl;*/
 
         return true;   
     }

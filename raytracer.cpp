@@ -6,13 +6,17 @@
 #include <cstdint> 
 #include <iostream> 
 #include <fstream> 
-#include <cmath> 
+#include <cmath>
+#include <stdio.h>
+#include <string.h> 
+#include <time.h>
 
 #ifndef RAYTRACERCPP_INCLUDE
 #define RAYTRACERCPP_INCLUDE
 
 #include "util.h"
 #include "bvh.h"
+#include "importer/plycpp.h"
 
  
 // Compute reflection direction 
@@ -97,7 +101,9 @@ bool trace(
             *hitObject = objects[k].get(); 
             tNear = tNearK; 
             index = indexK; 
-            uv = uvK; 
+            uv = uvK;
+            //std::cout << "hit" << std::endl;
+            //std::cout << objects[k]->objectBounds() << std::endl;
         } 
     } 
  
@@ -114,6 +120,7 @@ bool traceBVH(
 
     if (bvh.intersect(orig, dir, tNear, index, uv)) {
         *hitObject = bvh.orderedObjects[index].get();
+        //std::cout << bvh.orderedObjects[index]->objectBounds() << std::endl;
     }
 
  
@@ -183,7 +190,7 @@ Vec3f castRay(
             default: 
             { 
 // We use the Phong illumation model int the default case. The phong model is composed of a diffuse and a specular reflection component. 
-
+                // std::cout << "default: " << std::endl;
                 Vec3f lightAmt = 0, specularColor = 0; 
                 Vec3f shadowPointOrig = (dotProduct(dir, N) < 0) ? 
                     hitPoint + N * options.bias : 
@@ -199,8 +206,9 @@ Vec3f castRay(
                     Object *shadowHitObject = nullptr; 
                     float tNearShadow = kInfinity; 
                     // is the point in shadow, and is the nearest occluding object closer to the object than the light itself?
-                    bool inShadow = trace(shadowPointOrig, lightDir, objects, tNearShadow, index, uv, &shadowHitObject) && 
-                        tNearShadow * tNearShadow < lightDistance2; 
+                    bool inShadow = traceBVH(bvh, shadowPointOrig, lightDir, objects, tNearShadow, index, uv, &shadowHitObject);
+                    // if (inShadow) std::cout << "shadow" << std::endl;
+                    inShadow = inShadow && tNearShadow * tNearShadow < lightDistance2;
                     lightAmt += (1 - inShadow) * lights[i]->intensity * LdotN; 
                     Vec3f reflectionDirection = reflect(-lightDir, N); 
                     specularColor += powf(std::max(0.f, -dotProduct(reflectionDirection, dir)), hitObject->specularExponent) * lights[i]->intensity; 
@@ -232,12 +240,21 @@ void render(
 
     for (uint32_t j = 0; j < options.height; ++j) { 
         for (uint32_t i = 0; i < options.width; ++i) { 
+            if ((j*options.width + i) % 100 == 0) std::cout << "pixel : " << j*options.width + i << "/" << options.height * options.width << std::endl; 
             // generate primary ray direction
             float x = (2 * (i + 0.5) / (float)options.width - 1) * imageAspectRatio * scale; 
             float y = (1 - 2 * (j + 0.5) / (float)options.height) * scale; 
             Vec3f dir = normalize(Vec3f(x, y, -1)); 
             *(pix++) = castRay(bvh, orig, dir, objects, lights, options, 0);
-            // if (j == 356 && i = 545) std::cout << 
+            /* // Partial Rendering
+            if (j > options.height/2 && j < options.height/2+20
+                & i > options.width/2 && i < options.width/2+20){
+                *(pix++) = castRay(bvh, orig, dir, objects, lights, options, 0);
+            }
+            else {
+                *(pix++) = Vec3f(1,1,1);
+            }
+            */
         } 
     } 
  
@@ -256,11 +273,137 @@ void render(
  
     delete [] framebuffer; 
 } 
+
+std::vector<std::string> split (const std::string& line, const std::string& delimiters) {
+   std::vector<std::string> words;
+   int end = 0;
+   for (;;) {
+      size_t start = line.find_first_not_of (delimiters, end);
+      if (start == std::string::npos) break;
+      end = line.find_first_of (delimiters, start);
+      words.push_back (line.substr (start, end - start));
+   }
+   return words;
+}
+
+bool importMesh(std::string fileName, std::vector<Vec3f> &vertices, 
+                std::vector<int> &vertexIndex) {
+
+    std::ifstream ply(fileName);
+    if (ply.fail()) {
+        std::cout << "failed to open a file" << std::endl;  
+        return false; 
+    }
+
+    std::string str;
+    while(getline(ply, str)) {
+        if(str == "end_header") break;
+    }
+
+    while (getline(ply, str)) {
+        auto words = split(str, " ");
+        if (words.size() == 5) {
+            vertices.push_back(Vec3f(std::stof(words[0]), 
+                                     std::stof(words[1]),
+                                     std::stof(words[2])));
+        }
+        if (words.size() == 4) {
+            vertexIndex.push_back(std::stoi(words[1]));
+            vertexIndex.push_back(std::stoi(words[2]));
+            vertexIndex.push_back(std::stoi(words[3]));
+        }
+
+    }
+    return true;
+}
+
+bool importMeshAsBox(std::string fileName, std::vector<Vec3f> &vertices, 
+                std::vector<int> &vertexIndex) {
+
+    std::ifstream ply(fileName);
+    if (ply.fail()) {
+        std::cout << "failed to open a file" << std::endl;  
+        return false; 
+    }
+
+    std::string str;
+    while(getline(ply, str)) {
+        if(str == "end_header") break;
+    }
+
+    float minNum = std::numeric_limits<float>::lowest();
+    float maxNum = std::numeric_limits<float>::max();
+    
+    Bounds3f bounds = Bounds3f();
+
+    while (getline(ply, str)) {
+        auto words = split(str, " ");
+        if (words.size() == 5) {
+            bounds = Union(bounds, Vec3f(std::stof(words[0]), 
+                                         std::stof(words[1]),
+                                         std::stof(words[2])));
+        }
+    }
+
+    std::cout << bounds.pMin.y << std::endl;
+
+    /*
+    ** 1 3
+    ** 0 2
+    **     5 7 
+    **     4 6
+    */
+    vertices.push_back(Vec3f(bounds.pMin.x, bounds.pMin.y, bounds.pMin.z));
+    vertices.push_back(Vec3f(bounds.pMin.x, bounds.pMax.y, bounds.pMin.z));
+    vertices.push_back(Vec3f(bounds.pMax.x, bounds.pMin.y, bounds.pMin.z));
+    vertices.push_back(Vec3f(bounds.pMax.x, bounds.pMax.y, bounds.pMin.z));
+
+    vertices.push_back(Vec3f(bounds.pMin.x, bounds.pMin.y, bounds.pMax.z));
+    vertices.push_back(Vec3f(bounds.pMin.x, bounds.pMax.y, bounds.pMax.z));
+    vertices.push_back(Vec3f(bounds.pMax.x, bounds.pMin.y, bounds.pMax.z));
+    vertices.push_back(Vec3f(bounds.pMax.x, bounds.pMax.y, bounds.pMax.z));
+
+    vertexIndex = {5, 4, 6,
+                   6, 7, 5,
+                   7, 1, 5,
+                   7, 3, 1,
+                   4, 1, 0,
+                   4, 5, 1,
+                   2, 7, 6,
+                   2, 3, 7,
+                   0, 3, 2,
+                   0, 1, 3,
+                   4, 0, 2,
+                   4, 2, 6};
+
+
+    return true;
+}
+
+bool addMesh(std::vector<std::shared_ptr<Object>> &objects, 
+             std::vector<Vec3f> &vertices, 
+             std::vector<int> &vertexIndex,
+             float scale = 1,
+             Vec3f t = Vec3f(0,0,0)) {
+    auto itor = vertexIndex.begin();
+    while (itor != vertexIndex.end()) {
+
+        Triangle *tri = new Triangle(vertices[*itor++] * scale + t, 
+                                     vertices[*itor++] * scale + t,
+                                     vertices[*itor++] * scale + t);
+        tri->materialType = DIFFUSE_AND_GLOSSY;
+        tri->diffuseColor = Vec3f(0, 0, 1.0);
+
+        objects.push_back(std::unique_ptr<Triangle>(tri));
+    }
+}
  
 // In the main function of the program, we create the scene (create objects and lights) as well as set the options for the render (image widht and height, maximum recursion depth, field-of-view, etc.). We then call the render function(). 
 
 int main(int argc, char **argv) 
 { 
+    clock_t start = clock();
+
     // creating the scene (adding objects and lights)
     std::vector<std::shared_ptr<Object>> objects; 
     std::vector<std::unique_ptr<Light>> lights; 
@@ -277,18 +420,18 @@ int main(int argc, char **argv)
     sph3->materialType = DIFFUSE_AND_GLOSSY; 
     sph3->diffuseColor = Vec3f(0.6, 0.7, 0.8); 
  
-    objects.push_back(std::unique_ptr<Sphere>(sph1)); 
-    objects.push_back(std::unique_ptr<Sphere>(sph2)); 
-    objects.push_back(std::unique_ptr<Sphere>(sph3));
+    // objects.push_back(std::unique_ptr<Sphere>(sph1)); 
+    // objects.push_back(std::unique_ptr<Sphere>(sph2)); 
+    // objects.push_back(std::unique_ptr<Sphere>(sph3));
 
     // Triangle Mesh Counte Clock wise
 
     // Floor
-    Triangle *tri1 = new Triangle(Vec3f(-5,-3,-5), Vec3f(5,-3,-15), Vec3f(-5,-3,-15));
+    Triangle *tri1 = new Triangle(Vec3f(-5,-5,-5), Vec3f(5,-5,-15), Vec3f(-5,-5,-15));
     tri1->materialType = DIFFUSE_AND_GLOSSY;
     tri1->diffuseColor = Vec3f(1.0, 0, 0);
 
-    Triangle *tri2 = new Triangle(Vec3f(-5,-3,-5), Vec3f(5,-3,-5), Vec3f(5,-3,-15));
+    Triangle *tri2 = new Triangle(Vec3f(-5,-5,-5), Vec3f(5,-5,-5), Vec3f(5,-5,-15));
     tri2->materialType = DIFFUSE_AND_GLOSSY;
     tri2->diffuseColor = Vec3f(1.0, 0, 0);
 
@@ -296,20 +439,20 @@ int main(int argc, char **argv)
     objects.push_back(std::unique_ptr<Triangle>(tri2));
 
     // Wall
-    Triangle *tri3 = new Triangle(Vec3f(-5,-3,-5), Vec3f(-5,-3,-15), Vec3f(-5,10,-15));
+    Triangle *tri3 = new Triangle(Vec3f(-5,-5,-5), Vec3f(-5,-5,-15), Vec3f(-5,10,-15));
     tri3->materialType = DIFFUSE_AND_GLOSSY;
     tri3->diffuseColor = Vec3f(0, 1.0, 0);
 
-    Triangle *tri4 = new Triangle(Vec3f(-5,-3,-5), Vec3f(-5,10,-15), Vec3f(-5,10,-5));
+    Triangle *tri4 = new Triangle(Vec3f(-5,-5,-5), Vec3f(-5,10,-15), Vec3f(-5,10,-5));
     tri4->materialType = DIFFUSE_AND_GLOSSY;
     tri4->diffuseColor = Vec3f(0, 1.0, 0);
 
     objects.push_back(std::unique_ptr<Triangle>(tri3));
     objects.push_back(std::unique_ptr<Triangle>(tri4));
 
-    Triangle *tri = new Triangle(Vec3f({2,-3,-10}), Vec3f(2,-3,-16), Vec3f(-2,-3,-16));
+    /*Triangle *tri = new Triangle(Vec3f({2,-3,-10}), Vec3f(2,-3,-16), Vec3f(-2,-3,-16));
     tri->materialType = DIFFUSE_AND_GLOSSY;
-    tri->diffuseColor = Vec3f(1.0, 0, 0);
+    tri->diffuseColor = Vec3f(1.0, 0, 0);*/
 
     // objects.push_back(std::unique_ptr<Triangle>(tri));
     /*
@@ -326,8 +469,15 @@ int main(int argc, char **argv)
  
     lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(-20, 70, 20), 0.5))); 
     lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(30, 50, -12), 1))); 
+    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 15, 10), 0.5))); 
 
-    // 5, -3, 6 +  5, -3, -16, + -5, -3, -16
+
+    std::vector<Vec3f> vertices; 
+    std::vector<int> vertexIndex; 
+    importMesh("../model/bun_zipper_res4.ply", vertices, vertexIndex);
+
+    addMesh(objects, vertices, vertexIndex, 40, Vec3f(0, -6.3, -12));
+
  
     // setting up options
     Options options; 
@@ -340,6 +490,10 @@ int main(int argc, char **argv)
  
     // finally, render
     render(options, objects, lights); 
+
+    clock_t end = clock();
+    const double time = static_cast<double>(end - start) / CLOCKS_PER_SEC * 1000.0;
+    printf("time %lf[ms]\n", time);
  
     return 0; 
 }
