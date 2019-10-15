@@ -68,6 +68,8 @@ public:
     Vec2f(float xx, float yy) : x(xx), y(yy) {} 
     Vec2f operator * (const float &r) const { return Vec2f(x * r, y * r); } 
     Vec2f operator + (const Vec2f &v) const { return Vec2f(x + v.x, y + v.y); } 
+    friend std::ostream& operator << (std::ostream &os, const Vec2f &v)
+    { return os << v.x << ", " << v.y; }
     float x, y; 
 }; 
  
@@ -344,14 +346,6 @@ public:
         uv.x *= invDet;
         uv.y *= invDet;
 
-
-        /*std::cout << orig << std::endl;
-        std::cout << dir << std::endl;
-        std::cout << v0 << std::endl;
-        std::cout << v1 << std::endl;
-        std::cout << v2 << std::endl;
-        std::cout << det << std::endl;*/
-
         return true;   
     }
 
@@ -373,6 +367,34 @@ public:
     }
 
     Vec3f v0, v1, v2;
+};
+
+class TriangleTile : public Triangle {
+public : 
+    TriangleTile(const Vec3f &_v0, const Vec3f &_v1, const Vec3f &_v2,
+                 const Vec2f &_st0, const Vec2f &_st1, const Vec2f &_st2) 
+                 : Triangle(_v0, _v1, _v2) {
+        st0 = _st0;
+        st1 = _st1;
+        st2 = _st2;
+    }
+
+    Vec3f evalDiffuseColor(const Vec2f &st) const 
+    { 
+        float scale = 5; 
+        float pattern = (fmodf(st.x * scale, 1) > 0.5) ^ (fmodf(st.y * scale, 1) > 0.5); 
+        return mix(Vec3f(0.5, 0, 0), Vec3f(0.5, 0.5, 0.5), pattern); 
+    }
+
+    void getSurfaceProperties(const Vec3f &P, const Vec3f &I, const uint32_t &index, const Vec2f &uv, Vec3f &N, Vec2f &st) const
+    {
+        Vec3f edge1 = normalize(v1 - v0); 
+        Vec3f edge2 = normalize(v2 - v1); 
+        N = normalize(crossProduct(edge1, edge2)); 
+        st = st0 * (1 - uv.x - uv.y) + st1 * uv.x + st2 * uv.y; 
+    }
+
+    Vec2f st0, st1, st2;
 };
 
  

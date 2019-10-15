@@ -182,9 +182,10 @@ Vec3f castRay(
                 fresnel(dir, N, hitObject->ior, kr);
                 Vec3f reflectionDirection = reflect(dir, N); 
                 Vec3f reflectionRayOrig = (dotProduct(reflectionDirection, N) < 0) ? 
-                    hitPoint + N * options.bias : 
-                    hitPoint - N * options.bias; 
+                    hitPoint - N * options.bias : 
+                    hitPoint + N * options.bias; 
                 hitColor = castRay(bvh, reflectionRayOrig, reflectionDirection, objects, lights, options, depth + 1) * kr; 
+                hitColor += hitObject->evalDiffuseColor(st) * hitObject->Kd;
                 break; 
             } 
             default: 
@@ -404,7 +405,7 @@ bool addMesh(std::vector<std::shared_ptr<Object>> &objects,
 }
 
 bool addLightRoom(std::vector<std::shared_ptr<Object>> &objects) {
-    Bounds3f room = Bounds3f(Vec3f(-7, -5, -15), Vec3f(7, 5, -5));
+    Bounds3f room = Bounds3f(Vec3f(-7, -5, -10), Vec3f(7, 5, -5));
 
     Triangle *left1 = new Triangle(Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
                                    Vec3f(room.pMin.x, room.pMax.y, room.pMax.z),
@@ -412,8 +413,10 @@ bool addLightRoom(std::vector<std::shared_ptr<Object>> &objects) {
     Triangle *left2 = new Triangle(Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
                                    Vec3f(room.pMin.x, room.pMax.y, room.pMin.z),
                                    Vec3f(room.pMin.x, room.pMax.y, room.pMax.z));
-    left1->materialType = DIFFUSE_AND_GLOSSY;
-    left2->materialType = DIFFUSE_AND_GLOSSY;
+    left1->materialType = REFLECTION;
+    left2->materialType = REFLECTION;
+    left1->ior = 3;
+    left2->ior = 3;
     left1->diffuseColor = Vec3f(1.0, 0, 0);
     left2->diffuseColor = Vec3f(1.0, 0, 0);
     objects.push_back(std::unique_ptr<Triangle>(left1));
@@ -425,25 +428,29 @@ bool addLightRoom(std::vector<std::shared_ptr<Object>> &objects) {
     Triangle *right2 = new Triangle(Vec3f(room.pMax.x, room.pMin.y, room.pMin.z),
                                    Vec3f(room.pMax.x, room.pMax.y, room.pMax.z),
                                    Vec3f(room.pMax.x, room.pMax.y, room.pMin.z));
-    right1->materialType = DIFFUSE_AND_GLOSSY;
-    right2->materialType = DIFFUSE_AND_GLOSSY;
+    right1->materialType = REFLECTION;
+    right2->materialType = REFLECTION;
+    right1->ior = 3;
+    right2->ior = 3;
     right1->diffuseColor = Vec3f(0, 1.0, 0);
     right2->diffuseColor = Vec3f(0, 1.0, 0);
     objects.push_back(std::unique_ptr<Triangle>(right1));
     objects.push_back(std::unique_ptr<Triangle>(right2));
 
-    Triangle *floor1 = new Triangle(Vec3f(room.pMax.x, room.pMin.y, room.pMax.z),
-                                   Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
-                                   Vec3f(room.pMin.x, room.pMin.y, room.pMax.z));
-    Triangle *floor2 = new Triangle(Vec3f(room.pMax.x, room.pMin.y, room.pMax.z),
-                                   Vec3f(room.pMax.x, room.pMin.y, room.pMin.z),
-                                   Vec3f(room.pMin.x, room.pMin.y, room.pMin.z));
+    TriangleTile *floor1 = new TriangleTile(Vec3f(room.pMin.x, room.pMin.y, room.pMax.z),
+                                            Vec3f(room.pMax.x, room.pMin.y, room.pMax.z),
+                                            Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
+                                            Vec2f(0,0), Vec2f(1,0), Vec2f(0,1));
+    TriangleTile *floor2 = new TriangleTile(Vec3f(room.pMax.x, room.pMin.y, room.pMax.z),
+                                            Vec3f(room.pMax.x, room.pMin.y, room.pMin.z),
+                                            Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
+                                            Vec2f(1,0), Vec2f(1,1), Vec2f(0,1));
     floor1->materialType = DIFFUSE_AND_GLOSSY;
     floor2->materialType = DIFFUSE_AND_GLOSSY;
     floor1->diffuseColor = Vec3f(0.5, 0.5, 0.5);
     floor2->diffuseColor = Vec3f(0.5, 0.5, 0.5);
-    objects.push_back(std::unique_ptr<Triangle>(floor1));
-    objects.push_back(std::unique_ptr<Triangle>(floor2));
+    objects.push_back(std::unique_ptr<TriangleTile>(floor1));
+    objects.push_back(std::unique_ptr<TriangleTile>(floor2));
 
     Triangle *ceiling1 = new Triangle(Vec3f(room.pMax.x, room.pMax.y, room.pMin.z),
                                       Vec3f(room.pMin.x, room.pMax.y, room.pMax.z),
@@ -482,12 +489,12 @@ int main(int argc, char **argv)
     std::vector<std::shared_ptr<Object>> objects; 
     std::vector<std::unique_ptr<Light>> lights; 
  
-    Sphere *sph1 = new Sphere(Vec3f(-4, -3, -6), 1.5); 
+    Sphere *sph1 = new Sphere(Vec3f(-3, -3, -6), 1); 
     sph1->materialType = DIFFUSE_AND_GLOSSY;
     sph1->diffuseColor = Vec3f(0.6, 0.7, 0.8); 
 
-    Sphere *sph2 = new Sphere(Vec3f(3, 1, -4), 1.5); 
-    sph2->ior = 1.5; 
+    Sphere *sph2 = new Sphere(Vec3f(3, 1, -5), 1.5); 
+    sph2->ior = 5; 
     sph2->diffuseColor = Vec3f(0, 0, 0); 
     sph2->materialType = REFLECTION; 
  
@@ -519,7 +526,7 @@ int main(int argc, char **argv)
     //lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(-20, 70, 20), 0.5))); 
     //lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(30, 50, -12), 1))); 
     lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 2, 10), 1.0))); 
-    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 4.5, -10), 1.0))); 
+    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 4.5, -5), 1.0))); 
 
 
     std::vector<Vec3f> vertices; 

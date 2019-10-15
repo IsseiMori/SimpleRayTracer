@@ -165,11 +165,13 @@ public:
                 // Check intersect for each object (there is one object except for meshes)
                 for (int i = 0; i < node->nObjects; ++i) { 
                     float tnearTmp;
-                    if (orderedObjects[node->firstObjOffset + i]->intersect(orig, dir, tnearTmp, index, uv)) {
+                    Vec2f uvK;
+                    if (orderedObjects[node->firstObjOffset + i]->intersect(orig, dir, tnearTmp, index, uvK)) {
                         hit = true;
                         if (tnearTmp < tnear) {
                             tnear = tnearTmp;
                             index = node->firstObjOffset + i;
+                            uv = uvK;
                             return true;
                         }
                     }
