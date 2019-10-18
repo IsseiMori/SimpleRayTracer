@@ -1,0 +1,6 @@
+dragon 
+vertices.push_back(Vec3f(std::stof(words[0]) * 100, 
+                                     std::stof(words[1]) * 100 - 14,
+                                     std::stof(words[2]) * 100 - 12));
+
+

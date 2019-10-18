@@ -405,7 +405,7 @@ bool addMesh(std::vector<std::shared_ptr<Object>> &objects,
 }
 
 bool addLightRoom(std::vector<std::shared_ptr<Object>> &objects) {
-    Bounds3f room = Bounds3f(Vec3f(-7, -5, -10), Vec3f(7, 5, -5));
+    Bounds3f room = Bounds3f(Vec3f(-7, -5, -12), Vec3f(7, 5, 90));
 
     Triangle *left1 = new Triangle(Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
                                    Vec3f(room.pMin.x, room.pMax.y, room.pMax.z),
@@ -440,11 +440,11 @@ bool addLightRoom(std::vector<std::shared_ptr<Object>> &objects) {
     TriangleTile *floor1 = new TriangleTile(Vec3f(room.pMin.x, room.pMin.y, room.pMax.z),
                                             Vec3f(room.pMax.x, room.pMin.y, room.pMax.z),
                                             Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
-                                            Vec2f(0,0), Vec2f(1,0), Vec2f(0,1));
+                                            Vec2f(0,0), Vec2f(1,0), Vec2f(0,15));
     TriangleTile *floor2 = new TriangleTile(Vec3f(room.pMax.x, room.pMin.y, room.pMax.z),
                                             Vec3f(room.pMax.x, room.pMin.y, room.pMin.z),
                                             Vec3f(room.pMin.x, room.pMin.y, room.pMin.z),
-                                            Vec2f(1,0), Vec2f(1,1), Vec2f(0,1));
+                                            Vec2f(1,0), Vec2f(1,15), Vec2f(0,15));
     floor1->materialType = DIFFUSE_AND_GLOSSY;
     floor2->materialType = DIFFUSE_AND_GLOSSY;
     floor1->diffuseColor = Vec3f(0.5, 0.5, 0.5);
@@ -473,6 +473,10 @@ bool addLightRoom(std::vector<std::shared_ptr<Object>> &objects) {
                                    Vec3f(room.pMin.x, room.pMax.y, room.pMin.z));
     back1->materialType = DIFFUSE_AND_GLOSSY;
     back2->materialType = DIFFUSE_AND_GLOSSY;
+    back1->specularExponent = 8;
+    back2->specularExponent = 8;
+    back1->Ks = 0.1;
+    back2->Ks = 0.1;
     back1->diffuseColor = Vec3f(0.5, 0.5, 0.5);
     back2->diffuseColor = Vec3f(0.5, 0.5, 0.5);
     objects.push_back(std::unique_ptr<Triangle>(back1));
@@ -493,10 +497,10 @@ int main(int argc, char **argv)
     sph1->materialType = DIFFUSE_AND_GLOSSY;
     sph1->diffuseColor = Vec3f(0.6, 0.7, 0.8); 
 
-    Sphere *sph2 = new Sphere(Vec3f(3, 1, -5), 1.5); 
-    sph2->ior = 5; 
+    Sphere *sph2 = new Sphere(Vec3f(3, -1, -5), 1.5); 
+    sph2->ior = 8; 
     sph2->diffuseColor = Vec3f(0, 0, 0); 
-    sph2->materialType = REFLECTION; 
+    sph2->materialType = REFLECTION_AND_REFRACTION; 
  
     objects.push_back(std::unique_ptr<Sphere>(sph1)); 
     objects.push_back(std::unique_ptr<Sphere>(sph2)); 
@@ -526,14 +530,14 @@ int main(int argc, char **argv)
     //lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(-20, 70, 20), 0.5))); 
     //lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(30, 50, -12), 1))); 
     lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 2, 10), 1.0))); 
-    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 4.5, -5), 1.0))); 
+    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 3, -7), 1.0))); 
 
 
     std::vector<Vec3f> vertices; 
     std::vector<int> vertexIndex; 
     importMesh("../model/dragon_vrip_res3.ply", vertices, vertexIndex);
 
-    // addMesh(objects, vertices, vertexIndex, 50, Vec3f(0, -8, -9));
+    addMesh(objects, vertices, vertexIndex, 50, Vec3f(0, -8, -9));
 
  
     // setting up options
@@ -541,7 +545,7 @@ int main(int argc, char **argv)
     options.width = 640; 
     options.height = 480; 
     options.fov = 90; 
-    options.backgroundColor = Vec3f(0.235294, 0.67451, 0.843137); 
+    options.backgroundColor = Vec3f(0, 0, 0); 
     options.maxDepth = 5; 
     options.bias = 0.00001; 
  
