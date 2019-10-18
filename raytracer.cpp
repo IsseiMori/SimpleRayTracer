@@ -16,7 +16,6 @@
 
 #include "util.h"
 #include "bvh.h"
-#include "importer/plycpp.h"
 
  
 // Compute reflection direction 
