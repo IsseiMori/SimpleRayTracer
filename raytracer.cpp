@@ -530,7 +530,7 @@ int main(int argc, char **argv)
     //lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(-20, 70, 20), 0.5))); 
     //lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(30, 50, -12), 1))); 
     lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 2, 10), 1.0))); 
-    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 3, -7), 1.0))); 
+    lights.push_back(std::unique_ptr<Light>(new Light(Vec3f(0, 3, -10), 1.0))); 
 
 
     std::vector<Vec3f> vertices; 
